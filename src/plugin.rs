@@ -1,18 +1,18 @@
 use nu_plugin::{EngineInterface, EvaluatedCall, PluginCommand};
 use nu_protocol::{IntoSpanned, LabeledError, PipelineData, Signature, SyntaxShape, Type, Value};
 
-pub struct HTTPPlugin;
+pub struct HTTPServePlugin;
 
-impl HTTPPlugin {
+impl HTTPServePlugin {
     pub fn new() -> Self {
-        HTTPPlugin {}
+        HTTPServePlugin {}
     }
 }
 
-pub struct HTTPServe;
+pub struct HTTPServeCmd;
 
-impl PluginCommand for HTTPServe {
-    type Plugin = HTTPPlugin;
+impl PluginCommand for HTTPServeCmd {
+    type Plugin = HTTPServePlugin;
 
     fn name(&self) -> &str {
         "http serve"
@@ -41,7 +41,7 @@ impl PluginCommand for HTTPServe {
     // run -> serve -> serve_connection -> hello -> run_eval
     fn run(
         &self,
-        _plugin: &HTTPPlugin,
+        _plugin: &HTTPServePlugin,
         engine: &EngineInterface,
         call: &EvaluatedCall,
         _input: PipelineData,

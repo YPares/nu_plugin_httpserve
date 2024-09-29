@@ -1,5 +1,5 @@
 [package]
-name = "nu_plugin_http_serve"
+name = "nu_plugin_httpserve"
 version = "0.1.0"
 edition = "2021"
 
