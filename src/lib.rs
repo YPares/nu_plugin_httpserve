@@ -13,7 +13,6 @@ impl Plugin for HTTPPlugin {
 
     fn commands(&self) -> Vec<Box<dyn PluginCommand<Plugin = Self>>> {
         vec![
-            Box::new(crate::commands::HTTPRequest),
             Box::new(crate::commands::HTTPServe),
         ]
     }

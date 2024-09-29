@@ -21,16 +21,16 @@ impl PluginCommand for HTTPServe {
     type Plugin = HTTPPlugin;
 
     fn name(&self) -> &str {
-        "h. serve"
+        "http serve"
     }
 
-    fn usage(&self) -> &str {
-        "Service HTTP requests"
+    fn description(&self) -> &str {
+        "Serve HTTP requests"
     }
 
     fn signature(&self) -> Signature {
         Signature::build(PluginCommand::name(self))
-            .required("path", SyntaxShape::String, "UNIX socket path to bind to")
+            .required("path", SyntaxShape::Int, "TCP port to bind to")
             .required(
                 "closure",
                 SyntaxShape::Closure(Some(vec![SyntaxShape::Record(vec![])])),
@@ -48,7 +48,7 @@ impl PluginCommand for HTTPServe {
         input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
         let span = call.head;
-        let path = call.req::<Value>(0)?.into_string()?;
+        let port = call.req(0)?;
         let closure = call.req::<Value>(1)?.into_closure()?.into_spanned(span);
 
         let (ctrlc_tx, ctrlc_rx) = tokio::sync::watch::channel(false);
@@ -58,7 +58,7 @@ impl PluginCommand for HTTPServe {
         }))?;
 
         plugin.runtime.block_on(async move {
-            let res = serve(ctrlc_rx, _guard, engine, span, closure, path).await;
+            let res = serve(ctrlc_rx, _guard, engine, span, closure, port).await;
             if let Err(err) = res {
                 eprintln!("serve error: {:?}", err);
             }
@@ -229,20 +229,11 @@ async fn serve(
     engine: &EngineInterface,
     span: Span,
     closure: Spanned<Closure>,
-    socket_path: String,
+    port: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let listener = tokio::net::UnixListener::bind(&socket_path).map_err(|err| {
-        let real_path =
-            std::fs::canonicalize(&socket_path).unwrap_or_else(|_| socket_path.clone().into());
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Error binding to socket: '{}': {}",
-                real_path.display(),
-                err
-            ),
-        )
-    })?;
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
 
     use tokio::sync::watch;
 
