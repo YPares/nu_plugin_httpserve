@@ -44,7 +44,7 @@ impl PluginCommand for HTTPServeCmd {
         _plugin: &HTTPServePlugin,
         engine: &EngineInterface,
         call: &EvaluatedCall,
-        _input: PipelineData,
+        input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
         let span = call.head;
         let num_threads = call.req(0)?;
@@ -71,10 +71,6 @@ impl PluginCommand for HTTPServeCmd {
         });
 
         println!("http serve finished");
-
-        let span = call.head;
-        let value = Value::string("http serve finished", span);
-        let body = PipelineData::Value(value, None);
-        return Ok(body);
+        return Ok(input);
     }
 }

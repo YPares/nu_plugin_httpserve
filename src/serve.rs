@@ -2,8 +2,6 @@ use http_body_util::combinators::BoxBody;
 use http_body_util::BodyExt;
 use http_body_util::StreamBody;
 use hyper::body::{Bytes, Frame};
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use nu_plugin::EngineInterface;
@@ -15,7 +13,6 @@ use nu_protocol::{
 use std::error::Error;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tokio::sync::watch;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
@@ -92,7 +89,7 @@ fn run_eval(
     }
 }
 
-async fn hello(
+async fn process_req(
     engine: &EngineInterface,
     span: Span,
     closure: Spanned<Closure>,
@@ -156,7 +153,7 @@ async fn hello(
 }
 
 pub(crate) async fn serve(
-    mut ctrlc_rx: watch::Receiver<bool>,
+    mut ctrlc_rx: tokio::sync::watch::Receiver<bool>,
     _guard: HandlerGuard,
     engine: &EngineInterface,
     span: Span,
@@ -200,10 +197,10 @@ async fn serve_connection<T: std::marker::Unpin + tokio::io::AsyncWrite + tokio:
     closure: Spanned<Closure>,
     io: TokioIo<T>,
 ) {
-    if let Err(err) = http1::Builder::new()
+    if let Err(err) = hyper::server::conn::http1::Builder::new()
         .serve_connection(
             io,
-            service_fn(|req| hello(&engine, span, closure.clone(), req)),
+            hyper::service::service_fn(|req| process_req(&engine, span, closure.clone(), req)),
         )
         .await
     {
