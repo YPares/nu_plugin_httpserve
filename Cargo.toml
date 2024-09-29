@@ -1,19 +1,16 @@
 [package]
-name = "nu_plugin_http"
+name = "nu_plugin_http_serve"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-tokio = { version = "1.40", features = ["full"] }
-tokio-stream = "0.1.15"
+bytes = "1.6.0"
 hyper = { version = "1.4", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
-bytes = "1.6.0"
 http = "1.1.0"
 http-body = "1.0.0"
 http-body-util = "0.1"
-
 nu-plugin = "0.98"
 nu-protocol = "0.98"
+tokio = { version = "1.40", features = ["full"] }
+tokio-stream = "0.1.15"

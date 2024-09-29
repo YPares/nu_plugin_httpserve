@@ -1,95 +1,23 @@
-#![allow(warnings)]
-
-use std::borrow::Borrow;
-use std::error::Error;
-use std::path::Path;
-
-use nu_plugin::{EngineInterface, EvaluatedCall, PluginCommand};
-
-use nu_protocol::engine::Closure;
-use nu_protocol::{
-    ByteStream, ByteStreamType, HandlerGuard, IntoSpanned, LabeledError, PipelineData, Record,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
-};
-
-// use crate::traits;
-use crate::HTTPPlugin;
-
-pub struct HTTPServe;
-
-impl PluginCommand for HTTPServe {
-    type Plugin = HTTPPlugin;
-
-    fn name(&self) -> &str {
-        "http serve"
-    }
-
-    fn description(&self) -> &str {
-        "Serve HTTP requests"
-    }
-
-    fn signature(&self) -> Signature {
-        Signature::build(PluginCommand::name(self))
-            .required("path", SyntaxShape::Int, "TCP port to bind to")
-            .required(
-                "closure",
-                SyntaxShape::Closure(Some(vec![SyntaxShape::Record(vec![])])),
-                "The closure to evaluate for each connection",
-            )
-            .input_output_type(Type::Any, Type::Any)
-    }
-
-    // run -> serve -> serve_connection -> hello -> run_eval
-    fn run(
-        &self,
-        plugin: &HTTPPlugin,
-        engine: &EngineInterface,
-        call: &EvaluatedCall,
-        input: PipelineData,
-    ) -> Result<PipelineData, LabeledError> {
-        let span = call.head;
-        let port = call.req(0)?;
-        let closure = call.req::<Value>(1)?.into_closure()?.into_spanned(span);
-
-        let (ctrlc_tx, ctrlc_rx) = tokio::sync::watch::channel(false);
-
-        let _guard = engine.register_signal_handler(Box::new(move |_| {
-            let _ = ctrlc_tx.send(true);
-        }))?;
-
-        plugin.runtime.block_on(async move {
-            let res = serve(ctrlc_rx, _guard, engine, span, closure, port).await;
-            if let Err(err) = res {
-                eprintln!("serve error: {:?}", err);
-            }
-        });
-
-        let span = call.head;
-        let value = Value::string("peace", span);
-        let body = PipelineData::Value(value, None);
-        return Ok(body);
-    }
-}
-
-use std::convert::Infallible;
-use std::net::SocketAddr;
-
-use http_body_util::Full;
+use http_body_util::combinators::BoxBody;
+use http_body_util::BodyExt;
+use http_body_util::StreamBody;
 use hyper::body::{Bytes, Frame};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
-use tokio::net::TcpListener;
+use nu_plugin::EngineInterface;
+use nu_protocol::engine::Closure;
+use nu_protocol::{
+    ByteStream, ByteStreamType, HandlerGuard, LabeledError, PipelineData, Record, ShellError, Span,
+    Spanned, Value,
+};
+use std::error::Error;
+use std::net::SocketAddr;
 use tokio::sync::mpsc;
-
 use tokio::sync::watch;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
-
-use http_body_util::combinators::BoxBody;
-use http_body_util::BodyExt;
-use http_body_util::StreamBody;
 
 fn run_eval(
     engine: &EngineInterface,
@@ -97,7 +25,7 @@ fn run_eval(
     closure: Spanned<Closure>,
     meta: Record,
     mut rx: mpsc::Receiver<Result<Vec<u8>, hyper::Error>>,
-    mut tx: mpsc::Sender<Result<Vec<u8>, ShellError>>,
+    tx: mpsc::Sender<Result<Vec<u8>, ShellError>>,
 ) {
     let stream = ByteStream::from_fn(
         span,
@@ -185,8 +113,8 @@ async fn hello(
     meta.insert("method", Value::string(req.method().to_string(), span));
     meta.insert("path", Value::string(uri.path().to_string(), span));
 
-    let (tx, mut closure_rx) = mpsc::channel(32);
-    let (mut closure_tx, rx) = mpsc::channel(32);
+    let (tx, closure_rx) = mpsc::channel(32);
+    let (closure_tx, rx) = mpsc::channel(32);
 
     let mut body = req.into_body();
 
@@ -223,7 +151,7 @@ async fn hello(
     Ok(Response::new(body))
 }
 
-async fn serve(
+pub(crate) async fn serve(
     mut ctrlc_rx: watch::Receiver<bool>,
     _guard: HandlerGuard,
     engine: &EngineInterface,
@@ -234,8 +162,6 @@ async fn serve(
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-
-    use tokio::sync::watch;
 
     loop {
         tokio::select! {
@@ -288,10 +214,4 @@ async fn serve_connection<T: std::marker::Unpin + tokio::io::AsyncWrite + tokio:
             eprintln!("Error serving connection: {:?}", err);
         }
     }
-}
-
-fn full<T: Into<Bytes>>(chunk: T) -> BoxBody<Bytes, hyper::Error> {
-    Full::new(chunk.into())
-        .map_err(|never| match never {})
-        .boxed()
 }
