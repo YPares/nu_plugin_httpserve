@@ -107,11 +107,15 @@ async fn hello(
     }
 
     let uri = req.uri();
+    let method = req.method().to_string();
+    let path = uri.path().to_string();
+
+    println!("Received {} {}", method, path);
 
     let mut meta = Record::new();
     meta.insert("headers", Value::record(headers, span));
-    meta.insert("method", Value::string(req.method().to_string(), span));
-    meta.insert("path", Value::string(uri.path().to_string(), span));
+    meta.insert("method", Value::string(method, span));
+    meta.insert("path", Value::string(path, span));
 
     let (tx, closure_rx) = mpsc::channel(32);
     let (closure_tx, rx) = mpsc::channel(32);
@@ -181,6 +185,7 @@ pub(crate) async fn serve(
                 }
             },
             _ = ctrlc_rx.changed() => {
+                println!("Received Ctrl+c");
                 // TODO: graceful shutdown of inflight connections
                 break;
             },

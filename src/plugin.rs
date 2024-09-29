@@ -1,24 +1,11 @@
 use nu_plugin::{EngineInterface, EvaluatedCall, PluginCommand};
 use nu_protocol::{IntoSpanned, LabeledError, PipelineData, Signature, SyntaxShape, Type, Value};
-use tokio::runtime::{Builder, Runtime};
 
-pub struct HTTPPlugin {
-    pub runtime: Runtime,
-}
+pub struct HTTPPlugin;
 
 impl HTTPPlugin {
     pub fn new() -> Self {
-        let runtime = Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create Tokio runtime");
-        HTTPPlugin { runtime }
-    }
-}
-
-impl Default for HTTPPlugin {
-    fn default() -> Self {
-        Self::new()
+        HTTPPlugin {}
     }
 }
 
@@ -37,6 +24,11 @@ impl PluginCommand for HTTPServe {
 
     fn signature(&self) -> Signature {
         Signature::build(PluginCommand::name(self))
+            .required(
+                "num_threads",
+                SyntaxShape::Int,
+                "Number of worker threads to use to reply to incoming connections",
+            )
             .required("port", SyntaxShape::Int, "TCP port to bind to")
             .required(
                 "closure",
@@ -49,14 +41,15 @@ impl PluginCommand for HTTPServe {
     // run -> serve -> serve_connection -> hello -> run_eval
     fn run(
         &self,
-        plugin: &HTTPPlugin,
+        _plugin: &HTTPPlugin,
         engine: &EngineInterface,
         call: &EvaluatedCall,
         _input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
         let span = call.head;
-        let port = call.req(0)?;
-        let closure = call.req::<Value>(1)?.into_closure()?.into_spanned(span);
+        let num_threads = call.req(0)?;
+        let port = call.req(1)?;
+        let closure = call.req::<Value>(2)?.into_closure()?.into_spanned(span);
 
         let (ctrlc_tx, ctrlc_rx) = tokio::sync::watch::channel(false);
 
@@ -64,15 +57,23 @@ impl PluginCommand for HTTPServe {
             let _ = ctrlc_tx.send(true);
         }))?;
 
-        plugin.runtime.block_on(async move {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(num_threads)
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime");
+
+        runtime.block_on(async move {
             let res = crate::serve::serve(ctrlc_rx, _guard, engine, span, closure, port).await;
             if let Err(err) = res {
                 eprintln!("serve error: {:?}", err);
             }
         });
 
+        println!("http serve finished");
+
         let span = call.head;
-        let value = Value::string("peace", span);
+        let value = Value::string("http serve finished", span);
         let body = PipelineData::Value(value, None);
         return Ok(body);
     }
