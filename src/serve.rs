@@ -106,13 +106,29 @@ async fn process_req(
     let uri = req.uri();
     let method = req.method().to_string();
     let path = uri.path().to_string();
+    let query = uri.query();
+    let query_params = if let Some(qs) = query {
+        let pairs = qs
+            .split("&")
+            .map(|kv| {
+                Value::list(
+                    kv.split("=").map(|s| Value::string(s, span)).collect(),
+                    span,
+                )
+            })
+            .collect();
+        Value::list(pairs, span)
+    } else {
+        Value::list(vec![], span)
+    };
 
-    println!("Received {} {}", method, path);
+    println!("Received {} {} ({:?})", method, path, query);
 
     let mut meta = Record::new();
     meta.insert("headers", Value::record(headers, span));
     meta.insert("method", Value::string(method, span));
     meta.insert("path", Value::string(path, span));
+    meta.insert("params", query_params);
 
     let (tx, closure_rx) = mpsc::channel(32);
     let (closure_tx, rx) = mpsc::channel(32);
