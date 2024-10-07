@@ -176,7 +176,7 @@ pub(crate) async fn serve(
     closure: Spanned<Closure>,
     port: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
