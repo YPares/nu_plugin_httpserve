@@ -48,7 +48,6 @@ fn run_eval(
             true,
             false,
         )
-        .map_err(|err| LabeledError::new(format!("shell error: {}", err)))
         .unwrap();
 
     match res {
